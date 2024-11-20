@@ -1,5 +1,6 @@
 import socket
 import time
+from pymongo import MongoClient
 
 maxPacketSize = 1024 #set arbitrary max packet size to 1024 bits
 serverIP = input("Enter server IP: ") #user inputs an ip
