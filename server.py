@@ -1,4 +1,5 @@
 import socket
+import pytz
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 
@@ -14,9 +15,9 @@ def process_query(query, db):
     collection = db.IoT_virtual
 
     try:
-        pst = timezone("US/Pacific")
+        pst = pytz.timezone("US/Pacific")
         if query == "1":  # Average moisture in the past three hours
-            utc_now = datetime.utcnow()
+            utc_now = datetime.now(pytz.utc)
             three_hours_ago_utc = utc_now - timedelta(hours=3)
             three_hours_ago_pst = three_hours_ago_utc.astimezone(pst)
 
