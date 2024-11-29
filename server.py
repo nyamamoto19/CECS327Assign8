@@ -44,7 +44,7 @@ def process_query(query, db):
             if desiredMin <= average_moisture <= desiredMax:
                 return (
                     f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
-                    f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now."
+                    f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now.\n"
                 )
             else:
                 return (
@@ -59,9 +59,8 @@ def process_query(query, db):
 
             desiredMin, desiredMax = 0, 0
             for doc in metaRes:
-                desiredMin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMinValue'])
-                desiredMax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMaxValue'])
-
+                desiredMin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMinValue'])
+                desiredMax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMaxValue'])
             total_water_liters, count = 0, 0
             for doc in results:
                 total_water_liters += float(doc['payload']['WaterFlowDish'])
@@ -70,8 +69,10 @@ def process_query(query, db):
             if count == 0:
                 return "No water consumption data available."
             average_water_gallons = total_water_liters * 0.264172 / count
+            desiredMin *= 0.264172
+            desiredMax *= 0.264172
             if desiredMin <= average_water_gallons <= desiredMax:
-                return f"Average water consumption per cycle: {average_water_gallons:.2f} gallons/min."
+                return f"Average water consumption per cycle: {average_water_gallons:.2f} gallons/min.\n"
             else:
                 return (f"Average water consumption per cycle: {average_water_gallons:.2f} gallons/min.\n"
                         f"\nAVERAGE WATER FLOW IS NOT WITHIN DESIRED RANGE, PLEASE CHECK ON THIS DEVICE.\n")
@@ -86,19 +87,55 @@ def process_query(query, db):
                 ]
             })
 
+            metaRes = meta.find({
+                "$or": [
+                    {"customAttributes.name": "washer"},
+                    {"customAttributes.name": "Fridge1"},
+                    {"customAttributes.name": "Fridge2"}
+                ]
+            })
+
+            ampmin, ampmax = 0, 0
+            for doc in metaRes:
+                if doc['customAttributes']['name'] == 'Fridge1':
+                    ampmin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMinValue'])
+                    ampmax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMaxValue'])
+            ampmax *= (0.001 * 120)
+            ampmin *= (0.001 * 120)
             consumption = {"Fridge 1": 0, "Fridge 2": 0, "Dishwasher": 0}
+
+            f1count,f2count,wcount = 0,0,0
+            #ammeter measurement are in Amps
+            #gets total amps measured among all the values in database
             for doc in results:
                 if "Ammeter1" in doc['payload']:
-                    consumption["Fridge 1"] += float(doc['payload']['Ammeter1']) * 0.001  # Wh to kWh
+                    consumption["Fridge 1"] += float(doc['payload']['Ammeter1'])
+                    f1count += 1
                 if "Ammeter2" in doc['payload']:
-                    consumption["Fridge 2"] += float(doc['payload']['Ammeter2']) * 0.001  # Wh to kWh
+                    consumption["Fridge 2"] += float(doc['payload']['Ammeter2'])
+                    f2count += 1
                 if "AmmeterDish" in doc['payload']:
-                    consumption["Dishwasher"] += float(doc['payload']['AmmeterDish']) * 0.001  # Wh to kWh
-
+                    consumption["Dishwasher"] += float(doc['payload']['AmmeterDish'])
+                    wcount += 1
+            #takes average of the amps and converts it to watts,and then kilowatts
+            for x in consumption:
+                if x == "Fridge 1":
+                    consumption[x] = (consumption[x]/f1count) * 0.001 * 120  # Wh to kWh and 120 V for average fridge
+                if x == "Fridge 2":
+                    consumption[x] = (consumption[x] / f2count) * 0.001 * 120  # Wh to kWh and 120 V for average fridge
+                if x == "Dishwasher":
+                    consumption[x] = (consumption[x] / wcount) * 0.001 * 120  # Wh to kWh and 120 V for average fridge
+            outOfRange = []
+            for x in consumption:
+                if consumption[x] > ampmax or consumption[x] < ampmin:
+                    outOfRange.append(x)
             max_device = max(consumption, key=consumption.get)
-            return (
-                f"The device consuming the most electricity is {max_device} with {consumption[max_device]:.2f} kWh."
-            )
+
+            if len(outOfRange) > 0:
+                return (f"The device consuming the most electricity is {max_device} with {consumption[max_device]:.2f} kWh.\n"
+                        f"\nTHE FOLLOWING DEVICE(S) WERE OUT OF THE DESIRED RANGE. PLEASE CHECK THESE DEVICES\n{" ".join(str(i) for i in outOfRange)}\n")
+            else:
+                return f"The device consuming the most electricity is {max_device} with {consumption[max_device]:.2f} kWh.\n"
 
         else:
             return "Invalid query."
