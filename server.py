@@ -41,7 +41,7 @@ def process_query(query, db):
             if count == 0:
                 return "No moisture data found in the past three hours."
             average_moisture = total_moisture / count
-            if average_moisture >= desiredMin and average_moisture <= desiredMax:
+            if desiredMin <= average_moisture <= desiredMax:
                 return (
                     f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
                     f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now."
@@ -50,11 +50,17 @@ def process_query(query, db):
                 return (
                     f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
                     f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now.\n"
-                    f"\nAVERAGE MOISTURE IS NOT WITHIN DESIRED RANGE, PLEASE CHECK ON THIS DEVICE."
+                    f"\nAVERAGE MOISTURE IS NOT WITHIN DESIRED RANGE, PLEASE CHECK ON THIS DEVICE.\n"
                 )
 
         elif query == "2":  # Average water consumption per cycle in the dishwasher
             results = collection.find({"payload.WaterFlowDish": {"$exists": True}})
+            metaRes = meta.find({"customAttributes.name": "washer"})
+
+            desiredMin, desiredMax = 0, 0
+            for doc in metaRes:
+                desiredMin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMinValue'])
+                desiredMax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMaxValue'])
 
             total_water_liters, count = 0, 0
             for doc in results:
@@ -64,7 +70,12 @@ def process_query(query, db):
             if count == 0:
                 return "No water consumption data available."
             average_water_gallons = total_water_liters * 0.264172 / count
-            return f"Average water consumption per cycle: {average_water_gallons:.2f} gallons."
+            if desiredMin <= average_water_gallons <= desiredMax:
+                return f"Average water consumption per cycle: {average_water_gallons:.2f} gallons/min."
+            else:
+                return (f"Average water consumption per cycle: {average_water_gallons:.2f} gallons/min.\n"
+                        f"\nAVERAGE WATER FLOW IS NOT WITHIN DESIRED RANGE, PLEASE CHECK ON THIS DEVICE.\n")
+
 
         elif query == "3":  # Device consuming more electricity
             results = collection.find({
