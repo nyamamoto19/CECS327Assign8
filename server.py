@@ -13,6 +13,7 @@ def get_database():
 def process_query(query, db):
     # MongoDB collection
     collection = db.IoT_virtual
+    meta = db.IoT_metadata
 
     try:
         pst = pytz.timezone("US/Pacific")
@@ -26,6 +27,12 @@ def process_query(query, db):
                 "time": {"$gte": three_hours_ago_utc}
             })
 
+            metaRes = meta.find({"customAttributes.name": "Fridge1"})
+            desiredMin, desiredMax = 0, 0
+            for doc in metaRes:
+                desiredMin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMinValue'])
+                desiredMax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMaxValue'])
+
             total_moisture, count = 0, 0
             for doc in results:
                 total_moisture += float(doc['payload']['Moisture Meter - Moisture2'])
@@ -34,10 +41,17 @@ def process_query(query, db):
             if count == 0:
                 return "No moisture data found in the past three hours."
             average_moisture = total_moisture / count
-            return (
-                f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
-                f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now."
-            )
+            if average_moisture >= desiredMin and average_moisture <= desiredMax:
+                return (
+                    f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
+                    f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now."
+                )
+            else:
+                return (
+                    f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
+                    f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now.\n"
+                    f"\nAVERAGE MOISTURE IS NOT WITHIN DESIRED RANGE, PLEASE CHECK ON THIS DEVICE."
+                )
 
         elif query == "2":  # Average water consumption per cycle in the dishwasher
             results = collection.find({"payload.WaterFlowDish": {"$exists": True}})
