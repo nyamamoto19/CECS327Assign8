@@ -3,7 +3,7 @@ import pytz
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 
-
+#creates a connection between the server and the mongoDB
 def get_database():
     url = "mongodb+srv://user1:user1Password@cluster0.0f9ks.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
     client = MongoClient(url)
@@ -12,41 +12,44 @@ def get_database():
 
 def process_query(query, db):
     # MongoDB collection
-    collection = db.IoT_virtual
-    meta = db.IoT_metadata
+    collection = db.IoT_virtual #holds the virtual data that the sensors create
+    meta = db.IoT_metadata #holds the metadata for all of the devices
 
     try:
         pst = pytz.timezone("US/Pacific")
         if query == "1":  # Average moisture in the past three hours
+            #sets the time and time range of 3 hours
             utc_now = datetime.now(pytz.utc)
             three_hours_ago_utc = utc_now - timedelta(hours=3)
             three_hours_ago_pst = three_hours_ago_utc.astimezone(pst)
 
-            results = collection.find({
+            results = collection.find({ #finds all data with moisture in the payload, within the time frame
                 "payload.Moisture Meter - Moisture2": {"$exists": True},
                 "time": {"$gte": three_hours_ago_utc}
             })
 
-            metaRes = meta.find({"customAttributes.name": "Fridge1"})
-            desiredMin, desiredMax = 0, 0
+            metaRes = meta.find({"customAttributes.name": "Fridge1"}) #gets the metadata for fridge
+            desiredMin, desiredMax = 0, 0 #out desired data range min and max
+            #sets the desired min and max to the desiredMinValue and desiredMaxValue from the database
             for doc in metaRes:
                 desiredMin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMinValue'])
                 desiredMax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][2]['customAttributes']['desiredMaxValue'])
 
             total_moisture, count = 0, 0
+            #gets all the moisture meter data, and sets a counter for finding the average value
             for doc in results:
                 total_moisture += float(doc['payload']['Moisture Meter - Moisture2'])
                 count += 1
 
             if count == 0:
                 return "No moisture data found in the past three hours."
-            average_moisture = total_moisture / count
-            if desiredMin <= average_moisture <= desiredMax:
+            average_moisture = total_moisture / count #average of the data
+            if desiredMin <= average_moisture <= desiredMax: 
                 return (
                     f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
                     f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now.\n"
                 )
-            else:
+            else: #when data returned is out of range of the desired values
                 return (
                     f"Average moisture in the fridge (last 3 hours, PST): {average_moisture:.2f} RH%.\n"
                     f"Queried from: {three_hours_ago_pst.strftime('%Y-%m-%d %H:%M:%S')} PST to now.\n"
@@ -54,10 +57,11 @@ def process_query(query, db):
                 )
 
         elif query == "2":  # Average water consumption per cycle in the dishwasher
-            results = collection.find({"payload.WaterFlowDish": {"$exists": True}})
-            metaRes = meta.find({"customAttributes.name": "washer"})
+            results = collection.find({"payload.WaterFlowDish": {"$exists": True}}) #gets data for waterflow meter
+            metaRes = meta.find({"customAttributes.name": "washer"}) #gets metadata for the washer
 
             desiredMin, desiredMax = 0, 0
+            #sets the desired min and max
             for doc in metaRes:
                 desiredMin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMinValue'])
                 desiredMax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMaxValue'])
@@ -68,6 +72,7 @@ def process_query(query, db):
 
             if count == 0:
                 return "No water consumption data available."
+            #data in database is saved as L/Min and we convert liters to gallons
             average_water_gallons = total_water_liters * 0.264172 / count
             desiredMin *= 0.264172
             desiredMax *= 0.264172
@@ -79,6 +84,7 @@ def process_query(query, db):
 
 
         elif query == "3":  # Device consuming more electricity
+            #gets data for all the ammeter data from the three devices
             results = collection.find({
                 "$or": [
                     {"payload.Ammeter1": {"$exists": True}},
@@ -86,7 +92,7 @@ def process_query(query, db):
                     {"payload.AmmeterDish": {"$exists": True}}
                 ]
             })
-
+            #gets ammeter metadata from one device, and can be used for all three devices since they all have the same parameters
             metaRes = meta.find({
                 "$or": [
                     {"customAttributes.name": "washer"},
@@ -94,12 +100,13 @@ def process_query(query, db):
                     {"customAttributes.name": "Fridge2"}
                 ]
             })
-
+            #sets max and min for ammeter
             ampmin, ampmax = 0, 0
             for doc in metaRes:
                 if doc['customAttributes']['name'] == 'Fridge1':
                     ampmin += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMinValue'])
                     ampmax += float(doc['customAttributes']['children'][0]['customAttributes']['children'][1]['customAttributes']['desiredMaxValue'])
+            #converts to watts and then kilowatts from an assumed 120 V circuit
             ampmax *= (0.001 * 120)
             ampmin *= (0.001 * 120)
             consumption = {"Fridge 1": 0, "Fridge 2": 0, "Dishwasher": 0}
@@ -125,10 +132,12 @@ def process_query(query, db):
                     consumption[x] = (consumption[x] / f2count) * 0.001 * 120  # Wh to kWh and 120 V for average fridge
                 if x == "Dishwasher":
                     consumption[x] = (consumption[x] / wcount) * 0.001 * 120  # Wh to kWh and 120 V for average fridge
+            #list for all devices out of range in electricity consumption
             outOfRange = []
             for x in consumption:
                 if consumption[x] > ampmax or consumption[x] < ampmin:
                     outOfRange.append(x)
+            #gets the device that uses the most electricity
             max_device = max(consumption, key=consumption.get)
 
             if len(outOfRange) > 0:
