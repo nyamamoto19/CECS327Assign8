@@ -142,7 +142,7 @@ def process_query(query, db):
 
             if len(outOfRange) > 0:
                 return (f"The device consuming the most electricity is {max_device} with {consumption[max_device]:.2f} kWh.\n"
-                        f"\nTHE FOLLOWING DEVICE(S) WERE OUT OF THE DESIRED RANGE. PLEASE CHECK THESE DEVICES\n{" ".join(str(i) for i in outOfRange)}\n")
+                        f"\nTHE FOLLOWING DEVICE(S) WERE OUT OF THE DESIRED RANGE. PLEASE CHECK THESE DEVICES\n".format(" ".join(str(i) for i in outOfRange)))
             else:
                 return f"The device consuming the most electricity is {max_device} with {consumption[max_device]:.2f} kWh.\n"
 
