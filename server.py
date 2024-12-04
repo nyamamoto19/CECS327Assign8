@@ -73,13 +73,14 @@ def process_query(query, db):
             if count == 0:
                 return "No water consumption data available."
             #data in database is saved as L/Min and we convert liters to gallons
-            average_water_gallons = total_water_liters * 0.264172 / count
-            desiredMin *= 0.264172
-            desiredMax *= 0.264172
+            #assume an average 1 cycle per 118 min
+            average_water_gallons = (total_water_liters * 0.264172 / count) * 118
+            desiredMin *= 0.264172 * 118
+            desiredMax *= 0.264172 * 118
             if desiredMin <= average_water_gallons <= desiredMax:
-                return f"Average water consumption per cycle: {average_water_gallons:.2f} gallons/min.\n"
+                return f"Average water consumption per cycle: {average_water_gallons:.2f} gallons.\n"
             else:
-                return (f"Average water consumption per cycle: {average_water_gallons:.2f} gallons/min.\n"
+                return (f"Average water consumption per cycle: {average_water_gallons:.2f} gallons.\n"
                         f"\nAVERAGE WATER FLOW IS NOT WITHIN DESIRED RANGE, PLEASE CHECK ON THIS DEVICE.\n")
 
 
