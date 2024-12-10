@@ -1,3 +1,4 @@
+# Clément Rodallec & Nicholas Yamamoto Grp 19
 # CECS 327 Assignment 8
 
 1. Clone the repo
