@@ -1,5 +1,6 @@
 # Clément Rodallec & Nicholas Yamamoto Grp 19
 # CECS 327 Assignment 8
+#Clement Rodallec Nicholas Yamamoto Group 19
 
 1. Clone the repo
 ```
